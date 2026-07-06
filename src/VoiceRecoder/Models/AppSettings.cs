@@ -7,4 +7,6 @@ public sealed class AppSettings
     public string ApiKey { get; set; } = string.Empty;
 
     public string Language { get; set; } = "zh-CN";
+
+    public bool FirstRunGuideCompleted { get; set; }
 }

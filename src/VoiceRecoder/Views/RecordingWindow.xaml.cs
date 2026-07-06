@@ -16,6 +16,7 @@ public sealed partial class RecordingWindow : Window
     private readonly SpeechServiceFactory _speechServiceFactory = new();
     private readonly LogRepository _logRepository = new();
     private readonly SettingsRepository _settingsRepository = new();
+    private readonly PermissionService _permissionService = new();
 
     private ISpeechRecognitionService? _speechService;
     private CancellationTokenSource? _recordingCts;
@@ -82,6 +83,17 @@ public sealed partial class RecordingWindow : Window
 
         try
         {
+            if (!await ShowFirstRunGuideIfNeededAsync())
+            {
+                return;
+            }
+
+            if (!await _permissionService.EnsureMicrophoneAccessAsync())
+            {
+                ShowError(PermissionService.MicrophoneDeniedMessage);
+                return;
+            }
+
             var settings = await _settingsRepository.GetAsync();
             _speechService = await _speechServiceFactory.CreateAsync();
 
@@ -300,5 +312,35 @@ public sealed partial class RecordingWindow : Window
     private void HideError()
     {
         ErrorInfoBar.IsOpen = false;
+    }
+
+    private async Task<bool> ShowFirstRunGuideIfNeededAsync()
+    {
+        var settings = await _settingsRepository.GetAsync();
+        if (settings.FirstRunGuideCompleted)
+        {
+            return true;
+        }
+
+        var dialog = new ContentDialog
+        {
+            Title = "欢迎使用语音日志",
+            Content = new ScrollViewer
+            {
+                Content = new TextBlock
+                {
+                    Text = PermissionService.FirstRunGuideText,
+                    TextWrapping = TextWrapping.WrapWholeWords
+                }
+            },
+            PrimaryButtonText = "我知道了",
+            XamlRoot = Content.XamlRoot
+        };
+
+        await dialog.ShowAsync();
+
+        settings.FirstRunGuideCompleted = true;
+        await _settingsRepository.SaveAsync(settings);
+        return true;
     }
 }
