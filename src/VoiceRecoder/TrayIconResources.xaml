@@ -4,6 +4,7 @@
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:tb="using:H.NotifyIcon">
 
+    <XamlUICommand x:Key="StartRecordingCommand" Label="开始录制" />
     <XamlUICommand x:Key="ExitApplicationCommand" Label="退出" />
 
     <tb:TaskbarIcon
@@ -12,7 +13,7 @@
         ToolTipText="语音日志">
         <tb:TaskbarIcon.ContextFlyout>
             <MenuFlyout>
-                <MenuFlyoutItem IsEnabled="False" Text="开始录制" />
+                <MenuFlyoutItem Command="{StaticResource StartRecordingCommand}" Text="开始录制" />
                 <MenuFlyoutItem IsEnabled="False" Text="查看记录" />
                 <MenuFlyoutSeparator />
                 <MenuFlyoutItem Command="{StaticResource ExitApplicationCommand}" Text="退出" />

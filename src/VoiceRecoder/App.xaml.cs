@@ -1,6 +1,7 @@
 ﻿using H.NotifyIcon;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Input;
+using VoiceRecoder.Views;
 
 namespace VoiceRecoder;
 
@@ -12,6 +13,8 @@ public partial class App : Application
 
     public bool HandleClosedEvents { get; set; } = true;
 
+    private RecordingWindow? _recordingWindow;
+
     public App()
     {
         InitializeComponent();
@@ -22,8 +25,22 @@ public partial class App : Application
         InitializeTrayIcon();
     }
 
+    public void ShowRecordingWindow()
+    {
+        if (_recordingWindow is null)
+        {
+            _recordingWindow = new RecordingWindow();
+            _recordingWindow.Closed += (_, _) => _recordingWindow = null;
+        }
+
+        _recordingWindow.Activate();
+    }
+
     private void InitializeTrayIcon()
     {
+        var startRecordingCommand = (XamlUICommand)Resources["StartRecordingCommand"]!;
+        startRecordingCommand.ExecuteRequested += (_, _) => ShowRecordingWindow();
+
         var exitApplicationCommand = (XamlUICommand)Resources["ExitApplicationCommand"]!;
         exitApplicationCommand.ExecuteRequested += ExitApplicationCommand_ExecuteRequested;
 

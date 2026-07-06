@@ -1,0 +1,70 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Window
+    x:Class="VoiceRecoder.Views.RecordingWindow"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    Title="语音录制">
+
+    <Window.SystemBackdrop>
+        <MicaBackdrop />
+    </Window.SystemBackdrop>
+
+    <Grid Padding="24" RowSpacing="16">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+        </Grid.RowDefinitions>
+
+        <StackPanel Spacing="4">
+            <TextBlock
+                FontSize="20"
+                FontWeight="SemiBold"
+                Text="语音录制" />
+            <StackPanel Orientation="Horizontal" Spacing="8">
+                <Ellipse
+                    x:Name="StatusIndicator"
+                    Width="10"
+                    Height="10"
+                    VerticalAlignment="Center"
+                    Fill="{ThemeResource TextFillColorSecondaryBrush}" />
+                <TextBlock
+                    x:Name="StatusText"
+                    VerticalAlignment="Center"
+                    Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                    Text="就绪" />
+            </StackPanel>
+        </StackPanel>
+
+        <TextBox
+            x:Name="TranscriptTextBox"
+            Grid.Row="1"
+            AcceptsReturn="True"
+            PlaceholderText="识别的文字将显示在这里，可自行编辑修正..."
+            ScrollViewer.VerticalScrollBarVisibility="Auto"
+            TextWrapping="Wrap" />
+
+        <InfoBar
+            x:Name="ErrorInfoBar"
+            Grid.Row="2"
+            IsOpen="False"
+            Severity="Error" />
+
+        <StackPanel
+            Grid.Row="3"
+            HorizontalAlignment="Right"
+            Orientation="Horizontal"
+            Spacing="12">
+            <Button
+                x:Name="ClearButton"
+                Click="ClearButton_Click"
+                Content="清空" />
+            <Button
+                x:Name="ToggleButton"
+                Click="ToggleButton_Click"
+                Content="开始录制"
+                Style="{StaticResource AccentButtonStyle}" />
+        </StackPanel>
+    </Grid>
+</Window>
