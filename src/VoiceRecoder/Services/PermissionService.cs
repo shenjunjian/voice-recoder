@@ -36,9 +36,11 @@ public sealed class PermissionService
             // Fall back to MediaCapture initialization below.
         }
 
+        MediaCapture? capture = null;
+
         try
         {
-            var capture = new MediaCapture();
+            capture = new MediaCapture();
             var settings = new MediaCaptureInitializationSettings
             {
                 StreamingCaptureMode = StreamingCaptureMode.Audio,
@@ -55,6 +57,10 @@ public sealed class PermissionService
         catch (Exception ex) when (ex.HResult == unchecked((int)0x80070005))
         {
             return false;
+        }
+        finally
+        {
+            capture?.Dispose();
         }
     }
 }

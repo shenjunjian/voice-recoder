@@ -91,4 +91,42 @@ public sealed class LogRepository
             Gate.Release();
         }
     }
+
+    public async Task<bool> DeleteEntryAsync(
+        DateOnly date,
+        string entryId,
+        CancellationToken cancellationToken = default)
+    {
+        await Gate.WaitAsync(cancellationToken);
+
+        try
+        {
+            var dailyLog = await GetDailyLogAsync(date, cancellationToken);
+            var removed = dailyLog.Entries.RemoveAll(entry => entry.Id == entryId);
+            if (removed == 0)
+            {
+                return false;
+            }
+
+            var filePath = AppDataPaths.GetLogFilePath(date);
+            if (dailyLog.Entries.Count == 0)
+            {
+                if (File.Exists(filePath))
+                {
+                    File.Delete(filePath);
+                }
+            }
+            else
+            {
+                await using var stream = File.Create(filePath);
+                await JsonSerializer.SerializeAsync(stream, dailyLog, JsonOptions.Default, cancellationToken);
+            }
+
+            return true;
+        }
+        finally
+        {
+            Gate.Release();
+        }
+    }
 }

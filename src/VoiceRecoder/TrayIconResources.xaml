@@ -5,6 +5,7 @@
     xmlns:tb="using:H.NotifyIcon">
 
     <XamlUICommand x:Key="StartRecordingCommand" Label="开始录制" />
+    <XamlUICommand x:Key="OpenRecordingWindowCommand" Label="打开录制窗口" />
     <XamlUICommand x:Key="ViewHistoryCommand" Label="查看记录" />
     <XamlUICommand x:Key="OpenSettingsCommand" Label="设置" />
     <XamlUICommand x:Key="ExitApplicationCommand" Label="退出" />

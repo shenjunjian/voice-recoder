@@ -36,3 +36,7 @@ dotnet run --project src/VoiceRecoder/VoiceRecoder.csproj
 ```
 
 启动后应用以托盘图标常驻，无可见主窗口。右键托盘图标可打开上下文菜单。
+
+
+Get-Process -Name "VoiceRecoder" -ErrorAction SilentlyContinue | Stop-Process -Force
+dotnet run --project src/VoiceRecoder/VoiceRecoder.csproj

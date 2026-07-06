@@ -59,17 +59,45 @@
                 x:Name="EntriesListView"
                 Grid.Row="1"
                 IsItemClickEnabled="False">
+                <ListView.ItemContainerStyle>
+                    <Style TargetType="ListViewItem">
+                        <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+                        <Setter Property="Padding" Value="0" />
+                    </Style>
+                </ListView.ItemContainerStyle>
                 <ListView.ItemTemplate>
                     <DataTemplate x:DataType="local:HistoryEntryItem">
-                        <StackPanel Margin="0,8" Spacing="4">
-                            <TextBlock
-                                FontSize="12"
-                                Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                                Text="{x:Bind TimestampText}" />
-                            <TextBlock
-                                Text="{x:Bind Text}"
-                                TextWrapping="WrapWholeWords" />
-                        </StackPanel>
+                        <Grid
+                            Margin="0,8"
+                            DoubleTapped="EntryItem_DoubleTapped"
+                            PointerEntered="EntryItem_PointerEntered"
+                            PointerExited="EntryItem_PointerExited">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <StackPanel Grid.Column="0" Spacing="4">
+                                <TextBlock
+                                    FontSize="12"
+                                    Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                    Text="{x:Bind TimestampText}" />
+                                <TextBlock
+                                    Text="{x:Bind Text}"
+                                    TextWrapping="WrapWholeWords" />
+                            </StackPanel>
+                            <Button
+                                x:Name="DeleteButton"
+                                Grid.Column="1"
+                                Margin="8,0,0,0"
+                                VerticalAlignment="Top"
+                                Click="DeleteEntryButton_Click"
+                                Style="{StaticResource SubtleButtonStyle}"
+                                Tag="{x:Bind}"
+                                ToolTipService.ToolTip="删除"
+                                Visibility="Collapsed">
+                                <FontIcon FontSize="14" Glyph="&#xE74D;" />
+                            </Button>
+                        </Grid>
                     </DataTemplate>
                 </ListView.ItemTemplate>
             </ListView>

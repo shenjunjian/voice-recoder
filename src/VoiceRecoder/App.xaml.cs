@@ -28,22 +28,37 @@ public partial class App : Application
     public App()
     {
         InitializeComponent();
+        UnhandledException += OnUnhandledException;
     }
 
     protected override void OnLaunched(LaunchActivatedEventArgs args)
     {
+        InitializeHostWindow();
         InitializeTrayIcon();
     }
 
     public void ShowRecordingWindow()
     {
-        if (_recordingWindow is null)
+        EnsureRecordingWindow();
+        _recordingWindow!.Activate();
+    }
+
+    public async Task ShowRecordingWindowAndStartAsync()
+    {
+        EnsureRecordingWindow();
+        _recordingWindow!.Activate();
+        await _recordingWindow.BeginRecordingAsync();
+    }
+
+    private void EnsureRecordingWindow()
+    {
+        if (_recordingWindow is not null)
         {
-            _recordingWindow = new RecordingWindow();
-            _recordingWindow.Closed += (_, _) => _recordingWindow = null;
+            return;
         }
 
-        _recordingWindow.Activate();
+        _recordingWindow = new RecordingWindow();
+        _recordingWindow.Closed += (_, _) => _recordingWindow = null;
     }
 
     public void ShowHistoryWindow()
@@ -68,10 +83,33 @@ public partial class App : Application
         _settingsWindow.Activate();
     }
 
+    private void InitializeHostWindow()
+    {
+        Window = new Window
+        {
+            Title = "语音日志",
+            Content = new Grid()
+        };
+
+        Window.Closed += (_, args) =>
+        {
+            if (HandleClosedEvents)
+            {
+                args.Handled = true;
+                Window.Hide();
+            }
+        };
+
+        Window.Hide();
+    }
+
     private void InitializeTrayIcon()
     {
         var startRecordingCommand = (XamlUICommand)Resources["StartRecordingCommand"]!;
-        startRecordingCommand.ExecuteRequested += (_, _) => ShowRecordingWindow();
+        startRecordingCommand.ExecuteRequested += async (_, _) => await ShowRecordingWindowAndStartAsync();
+
+        var openRecordingWindowCommand = (XamlUICommand)Resources["OpenRecordingWindowCommand"]!;
+        openRecordingWindowCommand.ExecuteRequested += (_, _) => ShowRecordingWindow();
 
         var viewHistoryCommand = (XamlUICommand)Resources["ViewHistoryCommand"]!;
         viewHistoryCommand.ExecuteRequested += (_, _) => ShowHistoryWindow();
@@ -83,12 +121,20 @@ public partial class App : Application
         exitApplicationCommand.ExecuteRequested += ExitApplicationCommand_ExecuteRequested;
 
         TrayIcon = (TaskbarIcon)Resources["TrayIcon"]!;
+        TrayIcon.ToolTipText = "语音日志 — 左键打开录制，右键菜单";
+        TrayIcon.LeftClickCommand = openRecordingWindowCommand;
         TrayIcon.ContextFlyout = BuildTrayMenu(
             startRecordingCommand,
             viewHistoryCommand,
             openSettingsCommand,
             exitApplicationCommand);
         TrayIcon.ForceCreate();
+    }
+
+    private void OnUnhandledException(object sender, Microsoft.UI.Xaml.UnhandledExceptionEventArgs e)
+    {
+        System.Diagnostics.Debug.WriteLine($"Unhandled exception: {e.Exception}");
+        e.Handled = true;
     }
 
     private MenuFlyout BuildTrayMenu(

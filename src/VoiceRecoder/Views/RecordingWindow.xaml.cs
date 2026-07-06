@@ -22,8 +22,11 @@ public sealed partial class RecordingWindow : Window
     private CancellationTokenSource? _recordingCts;
     private readonly StringBuilder _finalizedText = new();
     private string _partialText = string.Empty;
+    private readonly object _transcriptLock = new();
+    private DispatcherQueueTimer? _noSpeechHintTimer;
     private bool _isRecording;
     private bool _isBusy;
+    private bool _speechDetected;
 
     public RecordingWindow()
     {
@@ -45,6 +48,34 @@ public sealed partial class RecordingWindow : Window
         Error
     }
 
+    public Task BeginRecordingAsync()
+    {
+        var completion = new TaskCompletionSource();
+
+        if (!_dispatcherQueue.TryEnqueue(async () =>
+        {
+            try
+            {
+                if (!_isRecording && !_isBusy)
+                {
+                    ClearTranscriptForNewSession();
+                    await StartRecordingAsync();
+                }
+
+                completion.TrySetResult();
+            }
+            catch (Exception ex)
+            {
+                completion.TrySetException(ex);
+            }
+        }))
+        {
+            completion.TrySetException(new InvalidOperationException("Unable to schedule recording start."));
+        }
+
+        return completion.Task;
+    }
+
     private async void ToggleButton_Click(object sender, RoutedEventArgs e)
     {
         if (_isBusy)
@@ -58,6 +89,7 @@ public sealed partial class RecordingWindow : Window
             return;
         }
 
+        ClearTranscriptForNewSession();
         await StartRecordingAsync();
     }
 
@@ -68,11 +100,20 @@ public sealed partial class RecordingWindow : Window
             return;
         }
 
-        _finalizedText.Clear();
-        _partialText = string.Empty;
-        TranscriptTextBox.Text = string.Empty;
+        ClearTranscriptForNewSession();
         HideError();
         SetStatus("就绪", StatusKind.Ready);
+    }
+
+    private void ClearTranscriptForNewSession()
+    {
+        lock (_transcriptLock)
+        {
+            _finalizedText.Clear();
+            _partialText = string.Empty;
+        }
+
+        TranscriptTextBox.Text = string.Empty;
     }
 
     private async Task StartRecordingAsync()
@@ -115,9 +156,11 @@ public sealed partial class RecordingWindow : Window
             await _speechService.StartAsync(_recordingCts.Token);
 
             _isRecording = true;
+            _speechDetected = false;
             ToggleButton.Content = "停止并保存";
             ClearButton.IsEnabled = false;
             SetStatus("录音中…", StatusKind.Recording);
+            StartNoSpeechHintTimer();
         }
         catch (Exception ex)
         {
@@ -139,7 +182,25 @@ public sealed partial class RecordingWindow : Window
 
         try
         {
-            await CleanupSpeechServiceAsync();
+            if (_speechService is not null)
+            {
+                try
+                {
+                    await _speechService.StopAsync();
+                }
+                catch
+                {
+                    // Ignore stop failures; finalize whatever was recognized.
+                }
+            }
+
+            FinalizePartialTranscript();
+            UpdateTranscriptText();
+            var text = GetTranscriptText();
+
+            await CleanupSpeechServiceAsync(stopService: false);
+
+            StopNoSpeechHintTimer();
 
             _isRecording = false;
             ToggleButton.Content = "开始录制";
@@ -147,7 +208,7 @@ public sealed partial class RecordingWindow : Window
 
             if (saveEntry)
             {
-                var text = TranscriptTextBox.Text.Trim();
+                text = text.Trim();
                 if (!string.IsNullOrEmpty(text))
                 {
                     await _logRepository.AddEntryAsync(text);
@@ -191,16 +252,22 @@ public sealed partial class RecordingWindow : Window
 
     private void OnPartialResult(object? sender, string text)
     {
-        RunOnUiThread(() =>
+        lock (_transcriptLock)
         {
             _partialText = text;
+        }
+
+        _speechDetected = true;
+        RunOnUiThread(() =>
+        {
             UpdateTranscriptText();
+            SetStatus("录音中… 已检测到语音", StatusKind.Recording);
         });
     }
 
     private void OnFinalResult(object? sender, string text)
     {
-        RunOnUiThread(() =>
+        lock (_transcriptLock)
         {
             if (_finalizedText.Length > 0)
             {
@@ -209,7 +276,13 @@ public sealed partial class RecordingWindow : Window
 
             _finalizedText.Append(text);
             _partialText = string.Empty;
+        }
+
+        _speechDetected = true;
+        RunOnUiThread(() =>
+        {
             UpdateTranscriptText();
+            SetStatus("录音中… 已检测到语音", StatusKind.Recording);
         });
     }
 
@@ -222,14 +295,60 @@ public sealed partial class RecordingWindow : Window
         });
     }
 
-    private void UpdateTranscriptText()
+    private void FinalizePartialTranscript()
     {
-        TranscriptTextBox.Text = _finalizedText.ToString() +
-            (_partialText.Length > 0 ? _partialText : string.Empty);
-        TranscriptTextBox.SelectionStart = TranscriptTextBox.Text.Length;
+        lock (_transcriptLock)
+        {
+            if (_partialText.Length == 0)
+            {
+                return;
+            }
+
+            if (_finalizedText.Length > 0)
+            {
+                _finalizedText.Append(' ');
+            }
+
+            _finalizedText.Append(_partialText);
+            _partialText = string.Empty;
+        }
     }
 
-    private async Task CleanupSpeechServiceAsync()
+    private void UpdateTranscriptText()
+    {
+        string display;
+        lock (_transcriptLock)
+        {
+            display = _finalizedText.ToString() +
+                (_partialText.Length > 0 ? _partialText : string.Empty);
+        }
+
+        TranscriptTextBox.Text = display;
+        TranscriptTextBox.SelectionStart = display.Length;
+    }
+
+    private string GetTranscriptText()
+    {
+        lock (_transcriptLock)
+        {
+            var builderText = _finalizedText.ToString();
+            if (_partialText.Length > 0)
+            {
+                if (builderText.Length > 0)
+                {
+                    builderText += ' ';
+                }
+
+                builderText += _partialText;
+            }
+
+            builderText = builderText.Trim();
+            var textBoxText = TranscriptTextBox.Text.Trim();
+            return builderText.Length >= textBoxText.Length ? builderText : textBoxText;
+        }
+    }
+
+    private async Task CleanupSpeechServiceAsync(bool stopService = true)
     {
         if (_speechService is null)
         {
@@ -241,28 +360,81 @@ public sealed partial class RecordingWindow : Window
 
         UnsubscribeSpeechEvents(speechService);
 
-        try
+        if (stopService)
         {
-            await speechService.StopAsync();
-        }
-        catch
-        {
-            // Ignore cleanup failures after stop or window close.
+            try
+            {
+                await speechService.StopAsync();
+            }
+            catch
+            {
+                // Ignore cleanup failures after stop or window close.
+            }
         }
 
         _recordingCts?.Dispose();
         _recordingCts = null;
     }
 
+    private void StartNoSpeechHintTimer()
+    {
+        StopNoSpeechHintTimer();
+
+        _noSpeechHintTimer = _dispatcherQueue.CreateTimer();
+        _noSpeechHintTimer.Interval = TimeSpan.FromSeconds(4);
+        _noSpeechHintTimer.Tick += OnNoSpeechHintTimerTick;
+        _noSpeechHintTimer.Start();
+    }
+
+    private void StopNoSpeechHintTimer()
+    {
+        if (_noSpeechHintTimer is null)
+        {
+            return;
+        }
+
+        _noSpeechHintTimer.Tick -= OnNoSpeechHintTimerTick;
+        _noSpeechHintTimer.Stop();
+        _noSpeechHintTimer = null;
+    }
+
+    private void OnNoSpeechHintTimerTick(DispatcherQueueTimer sender, object args)
+    {
+        if (!_isRecording || _speechDetected)
+        {
+            return;
+        }
+
+        ShowError(
+            "未检测到语音输入。请检查：\n" +
+            "1. 麦克风是否连接且未被静音\n" +
+            "2. 系统「设置 → 隐私 → 麦克风」已允许本应用\n" +
+            "3. 已安装中文语音包并开启在线语音识别");
+    }
+
     private async void OnWindowClosed(object sender, WindowEventArgs args)
     {
         try
         {
-            var text = TranscriptTextBox.Text.Trim();
-
             if (_isRecording)
             {
-                await CleanupSpeechServiceAsync();
+                if (_speechService is not null)
+                {
+                    try
+                    {
+                        await _speechService.StopAsync();
+                    }
+                    catch
+                    {
+                        // Ignore cleanup failures after stop or window close.
+                    }
+                }
+
+                FinalizePartialTranscript();
+                var text = GetTranscriptText();
+
+                await CleanupSpeechServiceAsync(stopService: false);
+                StopNoSpeechHintTimer();
                 _isRecording = false;
 
                 if (!string.IsNullOrEmpty(text))
